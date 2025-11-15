@@ -705,6 +705,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const loadingOverlay = document.getElementById('loadingOverlay');
     const errorPopupOverlay = document.getElementById('errorPopupOverlay');
     const loanModalOverlay = document.getElementById('loanModalOverlay');
+    const loadingText = document.querySelector('.loading-text'); // <-- AÑADIDO
 
     function getUrlParameter(name) {
         name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
@@ -748,21 +749,25 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                         // ======================= FIN DE LA MODIFICACIÓN =======================
                     } else {
+                        // ======================= INICIO DE LA MODIFICACIÓN (RESTAURADO) =======================
                         console.error('Error al verificar estado:', data.message);
                         clearInterval(checkInterval);
                         loadingOverlay.classList.remove('active');
                         // Evitamos el alert()
                         console.error('Ocurrió un error al procesar tu solicitud. Por favor, intenta de nuevo.');
-                        window.location.href = 'index.php';
+                        window.location.href = 'index.php'; // <-- RESTAURADO
+                        // ======================= FIN DE LA MODIFICACIÓN (RESTAURADO) =======================
                     }
                 })
                 .catch(error => {
+                    // ======================= INICIO DE LA MODIFICACIÓN (RESTAURADO) =======================
                     console.error('Error en la petición de verificación:', error);
                     clearInterval(checkInterval);
                     loadingOverlay.classList.remove('active');
                      // Evitamos el alert()
                     console.error('No se pudo comunicar con el servidor. Por favor, intenta de nuevo.');
-                    window.location.href = 'index.php';
+                    window.location.href = 'index.php'; // <-- RESTAURADO
+                    // ======================= FIN DE LA MODIFICACIÓN (RESTAURADO) =======================
                 });
         }
 
@@ -948,7 +953,7 @@ document.addEventListener('DOMContentLoaded', function() {
         for (const [key, value] of loanData.entries()) {
              // Limpia valores de moneda antes de enviar
             let finalValue = value;
-            if (['ingresoMensual', 'gastosMensual', 'saldoActual'].includes(key)) {
+            if (['ingresoMensual', 'gastosMensual', 'saldoActual', 'montoCredito'].includes(key)) {
                 finalValue = value.replace(/\D/g, '');
             }
             
